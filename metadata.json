@@ -1,0 +1,5 @@
+{
+  "name": "MilStat: 單位人員事故統計系統",
+  "description": "A military personnel status tracking application for managing unit attendance, reporting incidents, and visualizing duty statistics.",
+  "requestFramePermissions": []
+}
