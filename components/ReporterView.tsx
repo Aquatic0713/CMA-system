@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, IncidentReport, TIME_SLOTS, getTodayString } from '../types';
 import { saveReport, getMyReports, deleteReport } from '../services/storageService';
-import { Send, Trash2, History, Calendar } from 'lucide-react';
+import { Send, Trash2, History, Calendar, Loader2 } from 'lucide-react';
 
 interface ReporterViewProps {
   user: UserProfile;
@@ -13,6 +13,8 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
   const [content, setContent] = useState('');
   const [history, setHistory] = useState<IncidentReport[]>([]);
   const [successMsg, setSuccessMsg] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // Updated quick options
   const quickOptions = ["出列", "轉診", "補修", "公差", "衛哨", "休假", "上課", "代表隊"];
@@ -21,10 +23,6 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
     // Determine current/next time slot based on current hour
     const currentHour = new Date().getHours();
     const foundSlot = TIME_SLOTS.find(slot => {
-        const start = parseInt(slot.split(':')[0]);
-        // Simple logic to find the slot that contains current hour
-        // Note: This logic assumes slots are ordered. 
-        // For variable lengths (1h vs 2h), we parse range.
         const parts = slot.split('-');
         const s = parseInt(parts[0].split(':')[0]);
         const e = parseInt(parts[1].split(':')[0]);
@@ -35,21 +33,23 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
     loadHistory();
   }, [user]);
 
-  const loadHistory = () => {
-    const data = getMyReports(user.positionKey, user.unit);
-    // Sort by most recent timestamp
+  const loadHistory = async () => {
+    setLoading(true);
+    const data = await getMyReports(user.positionKey, user.unit);
     setHistory(data.sort((a, b) => b.timestamp - a.timestamp));
+    setLoading(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
 
+    setSubmitting(true);
     const newReport: IncidentReport = {
-      id: Date.now().toString(),
+      id: Date.now().toString(), // Will be overridden in storageService with deterministic ID
       positionKey: user.positionKey,
       userName: user.name,
-      studentId: user.studentId, // Added studentId
+      studentId: user.studentId, 
       positionName: user.positionName,
       unit: user.unit,
       date: date,
@@ -58,16 +58,22 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
       timestamp: Date.now(),
     };
 
-    saveReport(newReport);
-    setSuccessMsg('事故回報成功！');
-    setTimeout(() => setSuccessMsg(''), 3000);
-    setContent('');
-    loadHistory();
+    try {
+        await saveReport(newReport);
+        setSuccessMsg('事故回報成功！');
+        setTimeout(() => setSuccessMsg(''), 3000);
+        setContent('');
+        await loadHistory();
+    } catch (e) {
+        alert("回報失敗，請檢查網路");
+    } finally {
+        setSubmitting(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('確定要刪除此紀錄嗎？')) {
-        deleteReport(id);
+        await deleteReport(id);
         loadHistory();
     }
   };
@@ -143,10 +149,11 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
 
           <button
             type="submit"
-            className="w-full flex items-center justify-center bg-blue-700 text-white py-3 px-4 rounded-md hover:bg-blue-800 transition shadow-md"
+            disabled={submitting}
+            className="w-full flex items-center justify-center bg-blue-700 text-white py-3 px-4 rounded-md hover:bg-blue-800 transition shadow-md disabled:bg-blue-400"
           >
-            <Send className="w-4 h-4 mr-2" />
-            提交回報
+            {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Send className="w-4 h-4 mr-2" />}
+            {submitting ? "提交中..." : "提交回報"}
           </button>
         </form>
 
@@ -159,13 +166,17 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
 
       {/* History List */}
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
-        <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center">
-            <History className="w-5 h-5 text-slate-500 mr-2" />
-            <h3 className="font-semibold text-slate-700">我的回報紀錄</h3>
+        <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center">
+                <History className="w-5 h-5 text-slate-500 mr-2" />
+                <h3 className="font-semibold text-slate-700">我的回報紀錄</h3>
+            </div>
+            {loading && <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />}
         </div>
+        
         {history.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-sm">
-                尚無紀錄
+                {loading ? "載入中..." : "尚無紀錄"}
             </div>
         ) : (
             <div className="divide-y divide-slate-100">

@@ -1,51 +1,20 @@
-# MilStat: Unit Personnel Incident Statistics System
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
-A modern incident reporting and personnel management system built with React, TypeScript, and Vite.
+# Run and deploy your AI Studio app
 
-## Features
-- **Identity Binding**: Role-based authentication (Soldier, Sergeant, Officer, etc.)
-- **Status Reporting**: Real-time reporting of personnel status
-- **Duty Officer View**: Overview of unit status
-- **Dispatch Mode**: Managing tasks and dispatches
-- **Responsive Design**: Mobile-first UI with Tailwind CSS
+This contains everything you need to run your app locally.
 
-## Prerequisites
-- Node.js (v18 or higher)
-- npm or yarn
+View your app in AI Studio: https://ai.studio/apps/drive/1_TnqdolD0HrLsrB0-wPPytSBsbeCpvFi
 
-## Getting Started
+## Run Locally
 
-1. **Install Dependencies**
-   ```bash
-   npm install
-   ```
+**Prerequisites:**  Node.js
 
-2. **Start Development Server**
-   ```bash
-   npm run dev
-   ```
 
-3. **Build for Production**
-   ```bash
-   npm run build
-   ```
-
-4. **Preview Build**
-   ```bash
-   npm run preview
-   ```
-
-## Deployment
-
-This project is configured to deploy automatically to **GitHub Pages** using GitHub Actions.
-
-1. Push code to `main` branch.
-2. Go to repository **Settings** -> **Pages**.
-3. Select **GitHub Actions** as the source.
-4. The site will be available at your GitHub Pages URL automatically.
-
-## Tech Stack
-- **Framework**: React 19 + Vite
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS + PostCSS
-- **Icons**: Lucide React
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

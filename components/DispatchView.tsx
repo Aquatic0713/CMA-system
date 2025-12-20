@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { UserProfile, Unit, TIME_SLOTS, getTodayString, DispatchTask, IncidentReport } from '../types';
 import { getRoster, getReports, getTasks, saveTask, deleteTask, addDutyReports, removeDutyReports } from '../services/storageService';
-import { Briefcase, Calendar, Clock, Check, Users, Trash2, UserPlus, Info, List, PlusSquare, CheckCircle, Circle } from 'lucide-react';
+import { Briefcase, Calendar, Clock, Check, Users, Trash2, UserPlus, Info, List, PlusSquare, CheckCircle, Circle, Loader2 } from 'lucide-react';
 
 interface DispatchViewProps {
   user: UserProfile;
@@ -26,6 +26,7 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
   const [reports, setReports] = useState<IncidentReport[]>([]);
   const [existingTasks, setExistingTasks] = useState<DispatchTask[]>([]);
   const [loading, setLoading] = useState(false);
+  const [processing, setProcessing] = useState(false);
   
   // Quick options for tasks
   const quickTaskOptions = ["搬運公差", "打掃環境", "器材保養", "文書協助", "各班公差"];
@@ -44,11 +45,16 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
     fetchData();
   }, [user.unit]);
 
-  const fetchData = () => {
+  const fetchData = async () => {
     setLoading(true);
-    setRoster(getRoster(user.unit));
-    setReports(getReports(user.unit));
-    setExistingTasks(getTasks(user.unit));
+    const [r, rep, tasks] = await Promise.all([
+        getRoster(user.unit),
+        getReports(user.unit),
+        getTasks(user.unit)
+    ]);
+    setRoster(r);
+    setReports(rep);
+    setExistingTasks(tasks);
     setLoading(false);
   };
 
@@ -104,7 +110,7 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
     setSelectedAssignees(newSet);
   };
 
-  const handleDispatch = () => {
+  const handleDispatch = async () => {
     if (!taskName.trim()) {
         alert("請輸入公差名稱");
         return;
@@ -114,6 +120,7 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
         return;
     }
 
+    setProcessing(true);
     const assigneeList: string[] = Array.from(selectedAssignees);
     // Find names for snapshot
     const names: string[] = assigneeList.map(key => {
@@ -133,47 +140,56 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
         status: 'pending' // Default status
     };
 
-    saveTask(newTask);
-    
-    // Auto-create "Duty" reports for these users
-    addDutyReports(newTask);
+    try {
+        await saveTask(newTask);
+        // Auto-create "Duty" reports for these users
+        await addDutyReports(newTask);
 
-    fetchData(); // Refresh to update counts and lists
-    
-    // Reset Form
-    setTaskName('');
-    setSelectedAssignees(new Set());
-    
-    // Optional: Switch to list view on mobile to show success
-    if (window.innerWidth < 1024) {
-        setActiveMobileTab('list');
+        await fetchData(); // Refresh to update counts and lists
+        
+        // Reset Form
+        setTaskName('');
+        setSelectedAssignees(new Set());
+        
+        // Optional: Switch to list view on mobile to show success
+        if (window.innerWidth < 1024) {
+            setActiveMobileTab('list');
+        }
+    } catch(e) {
+        alert("派遣失敗，請檢查網路");
+    } finally {
+        setProcessing(false);
     }
   };
 
-  const toggleTaskStatus = (task: DispatchTask) => {
+  const toggleTaskStatus = async (task: DispatchTask) => {
       const newStatus = task.status === 'pending' ? 'completed' : 'pending';
       const updatedTask: DispatchTask = { ...task, status: newStatus };
       
-      // Update Task Status in Storage
-      saveTask(updatedTask);
+      try {
+        // Update Task Status in Storage
+        await saveTask(updatedTask);
 
-      // Handle Side Effects on Incident Reports
-      if (newStatus === 'completed') {
-          // If completed, remove the "Duty" reports
-          removeDutyReports(updatedTask);
-      } else {
-          // If toggled back to pending, re-add "Duty" reports
-          addDutyReports(updatedTask);
+        // Handle Side Effects on Incident Reports
+        if (newStatus === 'completed') {
+            // If completed, remove the "Duty" reports
+            await removeDutyReports(updatedTask);
+        } else {
+            // If toggled back to pending, re-add "Duty" reports
+            await addDutyReports(updatedTask);
+        }
+
+        fetchData();
+      } catch (e) {
+          alert("狀態更新失敗");
       }
-
-      fetchData();
   };
 
-  const handleDeleteTask = (task: DispatchTask) => {
+  const handleDeleteTask = async (task: DispatchTask) => {
     if(confirm("確定要取消此公差派遣嗎？這將會一併移除人員的公差事故。")) {
-        deleteTask(task.id);
+        await deleteTask(task.id);
         // Also ensure reports are cleaned up
-        removeDutyReports(task);
+        await removeDutyReports(task);
         fetchData();
     }
   };
@@ -191,7 +207,8 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
         </h2>
 
         <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            {/* iOS Fix: Change grid-cols-2 to grid-cols-1 on small screens (default) and sm:grid-cols-2 for larger */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                     <label className="block text-xs font-semibold text-slate-500 mb-1">日期</label>
                     <div className="relative">
@@ -199,9 +216,9 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
                             type="date"
                             value={date}
                             onChange={(e) => setDate(e.target.value)}
-                            className="w-full text-sm border-slate-300 rounded-md p-2 pl-8 border"
+                            className="w-full text-sm border-slate-300 rounded-md p-2 pl-8 border bg-white min-w-0"
                         />
-                        <Calendar className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
+                        <Calendar className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                     </div>
                 </div>
                 <div>
@@ -209,7 +226,7 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
                     <select
                         value={timeSlot}
                         onChange={(e) => setTimeSlot(e.target.value)}
-                        className="w-full text-sm border-slate-300 rounded-md p-2 border"
+                        className="w-full text-sm border-slate-300 rounded-md p-2 border bg-white min-w-0"
                     >
                         {TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
@@ -261,11 +278,11 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
 
             <button
                 onClick={handleDispatch}
-                disabled={!taskName || selectedAssignees.size === 0}
+                disabled={!taskName || selectedAssignees.size === 0 || processing}
                 className="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition flex items-center justify-center font-medium"
             >
-                <Check className="w-4 h-4 mr-2" />
-                確認派遣
+                {processing ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/> : <Check className="w-4 h-4 mr-2" />}
+                {processing ? "處理中..." : "確認派遣"}
             </button>
         </div>
     </div>
@@ -357,9 +374,9 @@ const DispatchView: React.FC<DispatchViewProps> = ({ user }) => {
 
         <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
             {candidates.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                    <Users className="w-12 h-12 mb-2 opacity-20" />
-                    <p>該時段無可用人員</p>
+                <div className="flex flex-col items-center justify-center h-full text-slate-400 text-sm">
+                    {loading ? <Loader2 className="w-8 h-8 animate-spin text-blue-500"/> : <Users className="w-12 h-12 mb-2 opacity-20" />}
+                    <p>{loading ? "載入中..." : "該時段無可用人員"}</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">

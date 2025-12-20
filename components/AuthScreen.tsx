@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Unit, Role, UserProfile } from '../types';
-import { saveUserProfile, updateRoster } from '../services/storageService';
-import { ShieldCheck, UserPlus } from 'lucide-react';
+import { saveUserProfile, updateRoster, getRoster } from '../services/storageService';
+import { ShieldCheck, UserPlus, Loader2 } from 'lucide-react';
 
 interface AuthScreenProps {
   onLogin: (profile: UserProfile) => void;
@@ -11,7 +11,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [unit, setUnit] = useState<Unit>(Unit.C1);
   const [role, setRole] = useState<Role>(Role.SOLDIER);
   const [name, setName] = useState('');
-  const [studentId, setStudentId] = useState(''); // Added student ID state
+  const [studentId, setStudentId] = useState('');
   
   // Sub-selection states
   const [hqRole, setHqRole] = useState('實習連長');
@@ -21,6 +21,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [soldierNum, setSoldierNum] = useState('1');
 
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Options Data
   const hqOptions = ["實習連長", "實習副連長", "實習連輔導長", "實習連士官督導長"];
@@ -29,25 +30,28 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const squadOptions = Array.from({length: 12}, (_, i) => (i + 1).toString());
   const soldierMemberOptions = Array.from({length: 10}, (_, i) => (i + 1).toString());
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    setIsSubmitting(true);
+
     if (!name.trim()) {
       setError('請輸入姓名');
+      setIsSubmitting(false);
       return;
     }
     if (!studentId.trim()) {
       setError('請輸入學號');
+      setIsSubmitting(false);
       return;
     }
 
     let positionName = "";
     let positionKey = "";
 
-    // Logic to generate unique Position Key and Name
     switch (role) {
       case Role.CADET_HQ:
         positionName = hqRole;
-        // Map to HQ_1, HQ_2...
         const hqIdx = hqOptions.indexOf(hqRole) + 1;
         positionKey = `HQ_${hqIdx}`;
         break;
@@ -71,18 +75,35 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         break;
     }
 
-    const profile: UserProfile = {
-      unit,
-      role,
-      name,
-      studentId, // Save student ID
-      positionName,
-      positionKey
-    };
+    try {
+        // Async Check for duplicates in Cloud
+        const currentRoster = await getRoster(unit);
+        const existingUser = currentRoster.find(u => u.positionKey === positionKey);
+        
+        if (existingUser) {
+            setError(`綁定失敗：此職位 (${positionName}) 已被「${existingUser.name}」綁定。若需變更，請原使用者先解除綁定。`);
+            setIsSubmitting(false);
+            return;
+        }
 
-    saveUserProfile(profile);
-    updateRoster(profile); // Also update the global roster for this unit
-    onLogin(profile);
+        const profile: UserProfile = {
+          unit,
+          role,
+          name,
+          studentId,
+          positionName,
+          positionKey
+        };
+
+        saveUserProfile(profile); // Local Session
+        await updateRoster(profile); // Cloud Roster
+        
+        onLogin(profile);
+    } catch (err) {
+        console.error(err);
+        setError("連線錯誤，請檢查網路或稍後再試。");
+        setIsSubmitting(false);
+    }
   };
 
   return (
@@ -98,8 +119,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
             {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm text-center border border-red-100">
-                    {error}
+                <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm text-left border border-red-100 flex items-start">
+                    <span className="mr-2 mt-0.5">⚠️</span>
+                    <span>{error}</span>
                 </div>
             )}
 
@@ -211,10 +233,15 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
           <button
             type="submit"
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-slate-800 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors"
+            disabled={isSubmitting}
+            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-slate-800 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 transition-colors disabled:bg-slate-500 disabled:cursor-not-allowed"
           >
-            <UserPlus className="w-4 h-4 mr-2" />
-            確認綁定
+            {isSubmitting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+                <UserPlus className="w-4 h-4 mr-2" />
+            )}
+            {isSubmitting ? "處理中..." : "確認綁定"}
           </button>
         </form>
       </div>

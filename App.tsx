@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Role } from './types';
-import { getUserProfile, clearUserProfile } from './services/storageService';
+import { getUserProfile, clearUserProfile, removeFromRoster } from './services/storageService';
 import AuthScreen from './components/AuthScreen';
 import ReporterView from './components/ReporterView';
 import DutyOfficerView from './components/DutyOfficerView';
 import DispatchView from './components/DispatchView';
-import { LogOut, User as UserIcon, Shield, Briefcase, Edit, AlertTriangle, X } from 'lucide-react';
+import { LogOut, User as UserIcon, Shield, Briefcase, Edit, AlertTriangle, Loader2 } from 'lucide-react';
 
 // Extended view roles to handle the "Dispatch" mode which isn't a strict Role but a View Mode
 type ViewMode = Role | 'DISPATCH_MODE';
@@ -16,6 +16,7 @@ const App: React.FC = () => {
   
   // State for Custom Confirmation Modal
   const [showResetModal, setShowResetModal] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   useEffect(() => {
     const profile = getUserProfile();
@@ -36,11 +37,22 @@ const App: React.FC = () => {
   };
 
   // Execute the actual reset
-  const confirmResetIdentity = () => {
-    clearUserProfile();
-    setUser(null);
-    setViewMode(null);
-    setShowResetModal(false);
+  const confirmResetIdentity = async () => {
+    setIsResetting(true);
+    try {
+        if (user) {
+            // Remove from the shared roster so the position becomes free again
+            await removeFromRoster(user.unit, user.positionKey);
+        }
+        clearUserProfile();
+        setUser(null);
+        setViewMode(null);
+        setShowResetModal(false);
+    } catch (e) {
+        alert("重置失敗，請檢查網路連線");
+    } finally {
+        setIsResetting(false);
+    }
   };
 
   // Logic: Duty Officer Mode is only for Cadet HQ and Platoon Leaders
@@ -199,7 +211,7 @@ const App: React.FC = () => {
                     
                     <p className="text-slate-600 mb-6 text-sm leading-relaxed">
                         您確定要解除目前的綁定嗎？<br/>
-                        <span className="text-slate-400 text-xs block mt-1">這將會清除本機的當前身分設定，讓您重新輸入姓名與職位。</span>
+                        <span className="text-slate-400 text-xs block mt-1">這將會清除本機的當前身分設定，並將此職位釋出供他人使用。</span>
                     </p>
 
                     <div className="flex space-x-3">
@@ -211,9 +223,11 @@ const App: React.FC = () => {
                         </button>
                         <button 
                             onClick={confirmResetIdentity}
-                            className="flex-1 py-2.5 px-4 bg-slate-800 text-white font-semibold rounded-lg hover:bg-slate-700 transition-colors shadow-sm"
+                            disabled={isResetting}
+                            className="flex-1 py-2.5 px-4 bg-slate-800 text-white font-semibold rounded-lg hover:bg-slate-700 transition-colors shadow-sm flex items-center justify-center"
                         >
-                            確定重置
+                            {isResetting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                            {isResetting ? "處理中..." : "確定重置"}
                         </button>
                     </div>
                 </div>

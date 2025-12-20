@@ -34,9 +34,12 @@ const DutyOfficerView: React.FC<DutyOfficerViewProps> = ({ user }) => {
     }) || TIME_SLOTS[0];
   }, []);
 
-  const fetchData = useCallback(() => {
-    const allUnitReports = getReports(user.unit);
-    const unitRoster = getRoster(user.unit);
+  const fetchData = useCallback(async () => {
+    // Now async
+    const [allUnitReports, unitRoster] = await Promise.all([
+        getReports(user.unit),
+        getRoster(user.unit)
+    ]);
     setReports(allUnitReports);
     setRoster(unitRoster);
   }, [user.unit]);
@@ -44,15 +47,14 @@ const DutyOfficerView: React.FC<DutyOfficerViewProps> = ({ user }) => {
   // Initial Load
   useEffect(() => {
     setLoading(true);
-    fetchData();
-    setTimeout(() => setLoading(false), 300);
+    fetchData().then(() => setLoading(false));
 
     // If initial load is today, ensure we start with the correct slot
     if (dateOffset === 0) {
         setSelectedTimeSlot(findCurrentSlot());
         setIsAutoTracking(true);
     }
-  }, [dateOffset, fetchData, findCurrentSlot]);
+  }, [dateOffset]); // Removed fetchData/findCurrentSlot from dependencies to prevent loop, relied on onmount logic for init
 
   // Rolling Adjustment & Live Data Sync
   useEffect(() => {
@@ -73,7 +75,7 @@ const DutyOfficerView: React.FC<DutyOfficerViewProps> = ({ user }) => {
     }, 5000); // Check every 5 seconds
 
     return () => clearInterval(interval);
-  }, [dateOffset, fetchData, isAutoTracking, findCurrentSlot]);
+  }, [dateOffset, isAutoTracking, fetchData, findCurrentSlot]);
 
   // Handler for manual time slot change
   const handleManualSlotChange = (newSlot: string) => {
@@ -251,8 +253,7 @@ const DutyOfficerView: React.FC<DutyOfficerViewProps> = ({ user }) => {
                     <button 
                         onClick={() => {
                             setLoading(true);
-                            fetchData();
-                            setTimeout(() => setLoading(false), 300);
+                            fetchData().then(() => setLoading(false));
                         }} 
                         className={`p-2 rounded-full hover:bg-slate-100 text-slate-500 transition-transform ${loading ? 'animate-spin' : ''}`}
                         title="手動更新資料"
