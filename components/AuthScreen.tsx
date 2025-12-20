@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Unit, Role, UserProfile } from '../types';
-import { saveUserProfile, updateRoster, getRoster } from '../services/storageService';
-import { ShieldCheck, UserPlus, Loader2 } from 'lucide-react';
+import { saveUserProfile, updateRoster, getRoster, isCloudMode } from '../services/storageService';
+import { ShieldCheck, UserPlus, Loader2, Wifi, WifiOff, AlertTriangle, Info, Table2 } from 'lucide-react';
 
 interface AuthScreenProps {
   onLogin: (profile: UserProfile) => void;
@@ -22,6 +22,10 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Connection Test State
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'fail'>('idle');
+  const [testMessage, setTestMessage] = useState('');
 
   // Options Data
   const hqOptions = ["實習連長", "實習副連長", "實習連輔導長", "實習連士官督導長"];
@@ -29,6 +33,45 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const staffOptions = ["人事士", "訓練士", "後勤士", "政戰士", "軍械士", "資安士"];
   const squadOptions = Array.from({length: 12}, (_, i) => (i + 1).toString());
   const soldierMemberOptions = Array.from({length: 10}, (_, i) => (i + 1).toString());
+
+  // Helper to interpret errors into user-friendly messages
+  const getFriendlyErrorMessage = (e: any): string => {
+      const msg = e.message || e.toString();
+      
+      if (msg.includes('getLastRow') || msg.includes('reading \'getLastRow\'')) {
+          return "Google Script 程式碼過舊。請至 GAS 編輯器確認已貼上最新程式碼，並務必執行「部署」>「建立新部署」！";
+      }
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+          return "無法連線至 Google Script。請檢查：1.網路連線 2.網址正確性 3.部署權限是否為「任何人」。";
+      }
+      if (msg.includes('Unexpected token') || msg.includes('非 JSON')) {
+          return "伺服器回應錯誤 (HTML)。通常是部署網址錯誤，或權限不足 (需設為「任何人」)。";
+      }
+      return msg;
+  };
+
+  const handleTestConnection = async () => {
+      setTestStatus('testing');
+      setTestMessage('連線中...');
+      try {
+          // Try to fetch roster for current unit as a test
+          const data = await getRoster(unit);
+          setTestStatus('success');
+          setTestMessage(`連線成功！讀取到 ${data.length} 筆資料。請檢查您的 Google Sheet 是否已自動建立 "Roster" 等工作表 (Tabs)。`);
+      } catch (e: any) {
+          setTestStatus('fail');
+          console.error("Test Connection Failed:", e);
+          let msg = "連線失敗。";
+          
+          if (!isCloudMode()) {
+             msg = "連線失敗：未設定雲端網址，目前為單機模式。";
+          } else {
+             msg = `連線失敗：${getFriendlyErrorMessage(e)}`;
+          }
+          
+          setTestMessage(msg);
+      }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,15 +142,15 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         await updateRoster(profile); // Cloud Roster
         
         onLogin(profile);
-    } catch (err) {
+    } catch (err: any) {
         console.error(err);
-        setError("連線錯誤，請檢查網路或稍後再試。");
+        setError(getFriendlyErrorMessage(err));
         setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4 py-8">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg overflow-hidden">
         <div className="bg-slate-800 p-6 text-center">
             <div className="mx-auto bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mb-4">
@@ -117,11 +160,35 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
           <p className="text-slate-400 text-sm mt-2">請設定您的所屬單位與職位</p>
         </div>
 
+        <div className="bg-slate-50 border-b border-slate-200 p-2 flex flex-col items-center space-y-2">
+             <button 
+                type="button"
+                onClick={handleTestConnection}
+                disabled={testStatus === 'testing'}
+                className="text-xs flex items-center text-slate-500 hover:text-blue-600 transition-colors"
+             >
+                {testStatus === 'testing' ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Wifi className="w-3 h-3 mr-1" />}
+                診斷雲端連線
+             </button>
+             
+             {/* New Tip regarding tabs */}
+             <div className="text-[10px] text-slate-400 flex items-center bg-yellow-50 px-2 py-1 rounded border border-yellow-100 w-full justify-center">
+                <Table2 className="w-3 h-3 mr-1 text-yellow-600" />
+                <span>注意：資料將寫入 Google Sheet 底部的 "Roster" 工作表</span>
+             </div>
+        </div>
+        
+        {testMessage && (
+            <div className={`p-3 text-xs text-center border-b ${testStatus === 'success' ? 'bg-green-50 text-green-700 border-green-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                {testMessage}
+            </div>
+        )}
+
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
             {error && (
-                <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm text-left border border-red-100 flex items-start">
-                    <span className="mr-2 mt-0.5">⚠️</span>
-                    <span>{error}</span>
+                <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm text-left border border-red-100 flex items-start animate-fade-in">
+                    <span className="mr-2 mt-0.5 flex-shrink-0"><AlertTriangle className="w-4 h-4"/></span>
+                    <span className="break-all">{error}</span>
                 </div>
             )}
 

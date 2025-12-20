@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Role } from './types';
-import { getUserProfile, clearUserProfile, removeFromRoster } from './services/storageService';
+import { getUserProfile, clearUserProfile, removeFromRoster, isCloudMode } from './services/storageService';
 import AuthScreen from './components/AuthScreen';
 import ReporterView from './components/ReporterView';
 import DutyOfficerView from './components/DutyOfficerView';
@@ -39,20 +39,23 @@ const App: React.FC = () => {
   // Execute the actual reset
   const confirmResetIdentity = async () => {
     setIsResetting(true);
-    try {
-        if (user) {
-            // Remove from the shared roster so the position becomes free again
+    
+    // 1. Try to remove from server (Best Effort)
+    if (user) {
+        try {
             await removeFromRoster(user.unit, user.positionKey);
+        } catch (e) {
+            console.warn("Server removal failed, but proceeding with local logout.", e);
+            // We do NOT stop the logout process here. We just log the error.
         }
-        clearUserProfile();
-        setUser(null);
-        setViewMode(null);
-        setShowResetModal(false);
-    } catch (e) {
-        alert("重置失敗，請檢查網路連線");
-    } finally {
-        setIsResetting(false);
     }
+
+    // 2. Always clear local session regardless of server status
+    clearUserProfile();
+    setUser(null);
+    setViewMode(null);
+    setShowResetModal(false);
+    setIsResetting(false);
   };
 
   // Logic: Duty Officer Mode is only for Cadet HQ and Platoon Leaders
@@ -115,7 +118,21 @@ const App: React.FC = () => {
               <Shield className="w-6 h-6 text-blue-400 mr-3" />
               <div>
                 <h1 className="text-lg font-bold leading-none">CMA system</h1>
-                <span className="text-xs text-slate-400 font-mono tracking-wider">{user.unit}</span>
+                <div className="flex items-center space-x-2">
+                    <span className="text-xs text-slate-400 font-mono tracking-wider">{user.unit}</span>
+                    {/* Cloud Status Indicator */}
+                    {isCloudMode() ? (
+                        <span className="flex items-center text-[10px] text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded border border-green-400/20" title="已連線至 Google Sheets">
+                            <span className="w-1.5 h-1.5 bg-green-400 rounded-full mr-1 animate-pulse"></span>
+                            雲端連線
+                        </span>
+                    ) : (
+                        <span className="flex items-center text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700" title="未設定 Google Script 網址">
+                             <span className="w-1.5 h-1.5 bg-slate-500 rounded-full mr-1"></span>
+                             單機模式
+                        </span>
+                    )}
+                </div>
               </div>
             </div>
             
