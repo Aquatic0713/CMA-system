@@ -43,6 +43,7 @@ export interface IncidentReport {
   timeSlot: string;
   content: string; 
   timestamp: number;
+  status: '進行中' | '已完成'; // Updated to Chinese for Google Sheets Dropdown compatibility
 }
 
 export interface DispatchTask {
@@ -54,7 +55,7 @@ export interface DispatchTask {
   assignees: string[]; // Array of positionKeys
   assigneeNames: string[]; // Snapshot of names for easy display
   timestamp: number;
-  status: 'pending' | 'completed'; // Added status
+  status: '進行中' | '已完成'; // Updated to Chinese
 }
 
 // Updated to full hourly slots based on user request for precision (e.g., 08:00-09:00)

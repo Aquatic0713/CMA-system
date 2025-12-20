@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserProfile, IncidentReport, TIME_SLOTS, getTodayString } from '../types';
 import { saveReport, getMyReports, deleteReport } from '../services/storageService';
-import { Send, Trash2, History, Calendar, Loader2 } from 'lucide-react';
+import { Send, Trash2, History, Calendar, Loader2, AlertTriangle } from 'lucide-react';
 
 interface ReporterViewProps {
   user: UserProfile;
@@ -15,6 +15,10 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Deletion Modal State
+  const [reportToDelete, setReportToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Updated quick options
   const quickOptions = ["出列", "轉診", "補修", "公差", "衛哨", "休假", "上課", "代表隊"];
@@ -56,6 +60,7 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
       timeSlot,
       content,
       timestamp: Date.now(),
+      status: '進行中' // Default status for manual reports
     };
 
     try {
@@ -71,10 +76,17 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('確定要刪除此紀錄嗎？')) {
-        await deleteReport(id);
-        loadHistory();
+  const executeDeleteReport = async () => {
+    if (!reportToDelete) return;
+    setIsDeleting(true);
+    try {
+        await deleteReport(reportToDelete);
+        await loadHistory();
+    } catch(e) {
+        alert("刪除失敗");
+    } finally {
+        setIsDeleting(false);
+        setReportToDelete(null);
     }
   };
 
@@ -192,9 +204,10 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
                             <span className="text-slate-800 font-medium">{record.content}</span>
                         </div>
                         <button 
-                            onClick={() => handleDelete(record.id)}
+                            onClick={() => setReportToDelete(record.id)}
                             className="text-slate-400 hover:text-red-500 p-2"
                             title="刪除"
+                            type="button"
                         >
                             <Trash2 className="w-4 h-4" />
                         </button>
@@ -203,6 +216,44 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
             </div>
         )}
       </div>
+
+       {/* Delete Confirmation Modal */}
+       {reportToDelete && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in">
+                <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full overflow-hidden scale-100 transform transition-all">
+                    <div className="p-6">
+                        <div className="flex items-center space-x-3 text-red-600 mb-4">
+                            <div className="bg-red-100 p-2 rounded-full">
+                                <AlertTriangle className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-800">確認刪除紀錄？</h3>
+                        </div>
+                        
+                        <p className="text-slate-600 mb-6 text-sm leading-relaxed">
+                            您確定要刪除這筆事故回報嗎？<br/>
+                            <span className="text-slate-400 text-xs block mt-1">刪除後將無法復原。</span>
+                        </p>
+
+                        <div className="flex space-x-3">
+                            <button 
+                                onClick={() => setReportToDelete(null)}
+                                className="flex-1 py-2.5 px-4 bg-slate-100 text-slate-700 font-semibold rounded-lg hover:bg-slate-200 transition-colors"
+                            >
+                                取消
+                            </button>
+                            <button 
+                                onClick={executeDeleteReport}
+                                disabled={isDeleting}
+                                className="flex-1 py-2.5 px-4 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors shadow-sm flex items-center justify-center"
+                            >
+                                {isDeleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                                {isDeleting ? "處理中..." : "確定刪除"}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
     </div>
   );
 };

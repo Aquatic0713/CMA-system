@@ -2,7 +2,7 @@
 <html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>CMA system - 單位人員事故統計</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -21,6 +21,20 @@
       ::-webkit-scrollbar-thumb:hover {
         background: #64748b; 
       }
+      
+      /* iOS Input Reset */
+      input, select, textarea {
+        -webkit-appearance: none;
+        appearance: none;
+        border-radius: 0;
+      }
+      
+      /* Fix for iOS date input looking empty */
+      input[type="date"] {
+        min-height: 2.5rem;
+        display: block;
+        -webkit-appearance: none;
+      }
     </style>
   <script type="importmap">
 {
@@ -33,7 +47,7 @@
 }
 </script>
 </head>
-  <body class="bg-slate-50 text-slate-800 antialiased">
+  <body class="bg-slate-50 text-slate-800 antialiased overflow-x-hidden">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

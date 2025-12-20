@@ -2,8 +2,6 @@ import { UserProfile, IncidentReport, Unit, DispatchTask } from '../types';
 
 // --- GOOGLE SHEETS API CONFIGURATION ---
 // ⚠️ 請在此處填入您的 Google Apps Script 部署網址 (Web App URL)
-// 格式通常為: https://script.google.com/macros/s/......./exec
-// 每次在 GAS 點擊「建立新部署」後，都會產生一個新網址，請務必更新此處。
 const RAW_SCRIPT_URL: string = "https://script.google.com/macros/s/AKfycbwdpYR_oFDQ0Qje_GiFJsplxtkE2xu-GMyjOm2xyOq9ebUjZJSLCssgdu1gUkEMb5wKfQ/exec";
 const GOOGLE_SCRIPT_URL = RAW_SCRIPT_URL.trim();
 
@@ -29,9 +27,6 @@ const TASKS_KEY_LOCAL = 'milstat_tasks_v3';
 async function callApi(action: string, payload: any = {}) {
     if (!isCloudEnabled) throw new Error("Cloud not enabled");
     
-    // Google Apps Script requires text/plain for CORS simple requests usually.
-    // We use POST to avoid payload size limits of GET.
-    
     let response;
     try {
         response = await fetch(GOOGLE_SCRIPT_URL, {
@@ -42,36 +37,28 @@ async function callApi(action: string, payload: any = {}) {
             body: JSON.stringify({ action, ...payload })
         });
     } catch (netErr) {
-        throw new Error("網路連線失敗，無法存取 Google Script。請檢查您的網路狀況。");
+        throw new Error("網路連線失敗");
     }
 
-    // First get text, then try to parse JSON. 
-    // This prevents crashing if GAS returns an HTML error page (like 404 or 500).
     const text = await response.text();
     let data;
     try {
         data = JSON.parse(text);
     } catch (e) {
-        // If it contains "script.google.com", it's likely a Google error page
-        console.error("API Parse Error. Raw response:", text);
         if (text.includes("Google Drive") || text.includes("script.google.com")) {
-            throw new Error("無法連結後端腳本。請確認：1.網址正確 2.部署權限設為「任何人」 3.是否已建立「新部署」。");
+            throw new Error("無法連結後端腳本");
         }
-        throw new Error(`伺服器回傳無效格式 (非 JSON)。回應片段: ${text.substring(0, 50)}...`);
+        throw new Error(`伺服器回傳無效格式`);
     }
 
     if (data.status === 'error') {
-        // Specific handling for the "getLastRow" error which indicates old code
-        if (data.message && (data.message.includes('getLastRow') || data.message.includes('reading \'getLastRow\''))) {
-            throw new Error("後端程式碼版本過舊。請回到 GAS 編輯器，確認程式碼已更新，並務必執行「部署」>「建立新部署」以套用變更。");
-        }
         throw new Error(data.message);
     }
     
     return data.data;
 }
 
-// --- Local User Session (Always Local) ---
+// --- Local User Session ---
 export const saveUserProfile = (profile: UserProfile): void => {
   localStorage.setItem(USER_KEY, JSON.stringify(profile));
 };
@@ -113,7 +100,9 @@ export const removeFromRoster = async (unit: Unit, positionKey: string): Promise
 
 export const getRoster = async (unit: Unit): Promise<UserProfile[]> => {
   if (isCloudEnabled) {
-      return await callApi('get_roster', { unit });
+      const data = await callApi('get_roster', { unit });
+      // FIREWALL: Double check unit matches to prevent cross-unit data leaks from backend bugs
+      return Array.isArray(data) ? data.filter((u: any) => u.unit === unit) : [];
   } else {
       const data = localStorage.getItem(ROSTER_KEY_LOCAL);
       if (!data) return [];
@@ -125,33 +114,34 @@ export const getRoster = async (unit: Unit): Promise<UserProfile[]> => {
 // --- Reports Management ---
 
 export const saveReport = async (report: IncidentReport): Promise<void> => {
+  // Ensure status has a default of '進行中'
+  const finalReport = { ...report, status: report.status || '進行中' };
+
   if (isCloudEnabled) {
-      const safeTime = report.timeSlot.replace(/:/g, '');
-      const docId = `${report.unit}_${report.positionKey}_${report.date}_${safeTime}`;
-      const finalReport = { ...report, id: docId };
-      
+      const safeTime = finalReport.timeSlot.replace(/:/g, '');
+      const docId = `${finalReport.unit}_${finalReport.positionKey}_${finalReport.date}_${safeTime}`;
+      // Override ID with deterministic one
+      finalReport.id = docId;
       await callApi('save_report', { report: finalReport });
   } else {
       const existingCheck = localStorage.getItem(REPORTS_KEY_LOCAL);
       const reports: IncidentReport[] = existingCheck ? JSON.parse(existingCheck) : [];
-      const index = reports.findIndex(
-        (r) => r.unit === report.unit && 
-               r.positionKey === report.positionKey && 
-               r.date === report.date && 
-               r.timeSlot === report.timeSlot
+      const filtered = reports.filter(
+        (r) => !(r.unit === finalReport.unit && 
+               r.positionKey === finalReport.positionKey && 
+               r.date === finalReport.date && 
+               r.timeSlot === finalReport.timeSlot)
       );
-      if (index >= 0) {
-        reports[index] = report;
-      } else {
-        reports.push(report);
-      }
-      localStorage.setItem(REPORTS_KEY_LOCAL, JSON.stringify(reports));
+      filtered.push(finalReport);
+      localStorage.setItem(REPORTS_KEY_LOCAL, JSON.stringify(filtered));
   }
 };
 
 export const getReports = async (unit: Unit): Promise<IncidentReport[]> => {
   if (isCloudEnabled) {
-      return await callApi('get_reports', { unit });
+      const data = await callApi('get_reports', { unit });
+      // FIREWALL: Client-side filtering
+      return Array.isArray(data) ? data.filter((r: any) => r.unit === unit) : [];
   } else {
       const data = localStorage.getItem(REPORTS_KEY_LOCAL);
       if (!data) return [];
@@ -161,13 +151,9 @@ export const getReports = async (unit: Unit): Promise<IncidentReport[]> => {
 };
 
 export const getMyReports = async (positionKey: string, unit: Unit): Promise<IncidentReport[]> => {
-  if (isCloudEnabled) {
-      const reports = await getReports(unit);
-      return reports.filter(r => r.positionKey === positionKey);
-  } else {
-      const reports = await getReports(unit);
-      return reports.filter((r) => r.positionKey === positionKey);
-  }
+  // Always fetch fresh data for the user
+  const reports = await getReports(unit);
+  return reports.filter(r => r.positionKey === positionKey);
 };
 
 export const deleteReport = async (reportId: string): Promise<void> => {
@@ -182,51 +168,99 @@ export const deleteReport = async (reportId: string): Promise<void> => {
     }
 }
 
-// --- Dispatch Tasks Management ---
+// --- Dispatch Tasks Management (Dual Storage) ---
+
+// Helper: Operate on LocalStorage for Tasks
+const updateLocalTask = (task: DispatchTask) => {
+    const existingCheck = localStorage.getItem(TASKS_KEY_LOCAL);
+    const tasks: DispatchTask[] = existingCheck ? JSON.parse(existingCheck) : [];
+    const index = tasks.findIndex(t => t.id === task.id);
+    if (index >= 0) {
+        tasks[index] = task;
+    } else {
+        tasks.push(task);
+    }
+    localStorage.setItem(TASKS_KEY_LOCAL, JSON.stringify(tasks));
+};
+
+const deleteLocalTask = (taskId: string) => {
+    const data = localStorage.getItem(TASKS_KEY_LOCAL);
+    if (!data) return;
+    const tasks: DispatchTask[] = JSON.parse(data);
+    const newTasks = tasks.filter(t => t.id !== taskId);
+    localStorage.setItem(TASKS_KEY_LOCAL, JSON.stringify(newTasks));
+};
+
+const getLocalTasks = (unit: Unit): DispatchTask[] => {
+    const data = localStorage.getItem(TASKS_KEY_LOCAL);
+    if (!data) return [];
+    const tasks: DispatchTask[] = JSON.parse(data);
+    return tasks.filter(t => t.unit === unit);
+};
 
 export const saveTask = async (task: DispatchTask): Promise<void> => {
+    // 1. Always save to LocalStorage (Shadow Copy) for immediate persistence
+    updateLocalTask(task);
+
+    // 2. Try saving to Cloud if enabled
     if (isCloudEnabled) {
-        await callApi('save_task', { task });
-    } else {
-        const existingCheck = localStorage.getItem(TASKS_KEY_LOCAL);
-        const tasks: DispatchTask[] = existingCheck ? JSON.parse(existingCheck) : [];
-        const index = tasks.findIndex(t => t.id === task.id);
-        if (index >= 0) {
-            tasks[index] = task;
-        } else {
-            tasks.push(task);
+        try {
+            await callApi('save_task', { task });
+        } catch (e) {
+            console.warn("Cloud save_task failed, using local copy.", e);
+            // We do NOT throw here. We rely on local copy to keep UI working.
         }
-        localStorage.setItem(TASKS_KEY_LOCAL, JSON.stringify(tasks));
     }
 };
 
 export const getTasks = async (unit: Unit): Promise<DispatchTask[]> => {
+    let cloudTasks: DispatchTask[] | null = null;
+    
+    // 1. Try fetching from Cloud
     if (isCloudEnabled) {
-        return await callApi('get_tasks', { unit });
-    } else {
-        const data = localStorage.getItem(TASKS_KEY_LOCAL);
-        if (!data) return [];
-        const tasks: DispatchTask[] = JSON.parse(data);
-        return tasks.filter(t => t.unit === unit);
+        try {
+            const rawData = await callApi('get_tasks', { unit });
+            // FIREWALL: Client-side filtering
+            if (Array.isArray(rawData)) {
+                cloudTasks = rawData.filter((t: any) => t.unit === unit);
+            }
+        } catch (e) {
+            console.warn("Cloud get_tasks failed/unsupported, falling back to local.", e);
+        }
     }
+
+    // 2. Get Local Data
+    const localTasks = getLocalTasks(unit);
+
+    // 3. Strategy: 
+    if (cloudTasks && cloudTasks.length > 0) {
+        return cloudTasks;
+    }
+
+    // Fallback
+    return localTasks;
 };
 
 export const deleteTask = async (taskId: string): Promise<void> => {
+    // 1. Always delete from LocalStorage
+    deleteLocalTask(taskId);
+
+    // 2. Try delete from Cloud
     if (isCloudEnabled) {
-        await callApi('delete_task', { id: taskId });
-    } else {
-        const data = localStorage.getItem(TASKS_KEY_LOCAL);
-        if (!data) return;
-        const tasks: DispatchTask[] = JSON.parse(data);
-        const newTasks = tasks.filter(t => t.id !== taskId);
-        localStorage.setItem(TASKS_KEY_LOCAL, JSON.stringify(newTasks));
+        try {
+            await callApi('delete_task', { id: taskId });
+        } catch (e) {
+            console.warn("Cloud delete_task failed", e);
+        }
     }
 };
 
 // --- Sync Functions: Task <-> Reports ---
 
-export const addDutyReports = async (task: DispatchTask): Promise<void> => {
-    const roster = await getRoster(task.unit);
+export const addDutyReports = async (task: DispatchTask, providedRoster?: UserProfile[]): Promise<void> => {
+    const roster = providedRoster || await getRoster(task.unit);
+    if (!roster || roster.length === 0) return;
+
     const promises = task.assignees.map(async (assigneeKey) => {
         const userProfile = roster.find(u => u.positionKey === assigneeKey);
         if (!userProfile) return; 
@@ -244,37 +278,29 @@ export const addDutyReports = async (task: DispatchTask): Promise<void> => {
             date: task.date,
             timeSlot: task.timeSlot,
             content: "公差",
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            status: task.status // Sync status from Task to Reports
         };
+        
         return saveReport(report);
     });
+    
     await Promise.all(promises);
 };
 
 export const removeDutyReports = async (task: DispatchTask): Promise<void> => {
-    if (isCloudEnabled) {
-        const allReports = await getReports(task.unit);
-        const reportsToDelete = allReports.filter(r => 
-            r.date === task.date &&
-            r.timeSlot === task.timeSlot &&
-            r.content === "公差" &&
-            task.assignees.includes(r.positionKey)
-        );
-        const deletePromises = reportsToDelete.map(r => deleteReport(r.id));
-        await Promise.all(deletePromises);
-    } else {
-        const existingCheck = localStorage.getItem(REPORTS_KEY_LOCAL);
-        if (!existingCheck) return;
-        let reports: IncidentReport[] = JSON.parse(existingCheck);
-        reports = reports.filter(r => {
-            const isMatch = 
-                r.unit === task.unit &&
-                r.date === task.date &&
-                r.timeSlot === task.timeSlot &&
-                task.assignees.includes(r.positionKey) &&
-                r.content === "公差";
-            return !isMatch; 
-        });
-        localStorage.setItem(REPORTS_KEY_LOCAL, JSON.stringify(reports));
-    }
+    // 1. Get all reports first
+    const allReports = await getReports(task.unit);
+    
+    // 2. Filter strictly
+    const reportsToDelete = allReports.filter(r => 
+        r.date === task.date &&
+        r.timeSlot === task.timeSlot &&
+        r.content === "公差" &&
+        task.assignees.includes(r.positionKey)
+    );
+
+    // 3. Delete them one by one
+    const deletePromises = reportsToDelete.map(r => deleteReport(r.id));
+    await Promise.all(deletePromises);
 };
