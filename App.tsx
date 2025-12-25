@@ -4,11 +4,10 @@ import { getUserProfile, clearUserProfile, removeFromRoster, isCloudMode } from 
 import AuthScreen from './components/AuthScreen';
 import ReporterView from './components/ReporterView';
 import DutyOfficerView from './components/DutyOfficerView';
-import DispatchView from './components/DispatchView';
-import { LogOut, User as UserIcon, Shield, Briefcase, Edit, AlertTriangle, Loader2 } from 'lucide-react';
+import { LogOut, User as UserIcon, Shield, Edit, AlertTriangle, Loader2 } from 'lucide-react';
 
 // Extended view roles to handle the "Dispatch" mode which isn't a strict Role but a View Mode
-type ViewMode = Role | 'DISPATCH_MODE';
+type ViewMode = Role;
 
 const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -66,18 +65,6 @@ const App: React.FC = () => {
   // Determine which component to render
   const renderContent = () => {
     if (!user) return null;
-
-    if (viewMode === 'DISPATCH_MODE' && isDutyOfficerCapable(user.role)) {
-        return (
-            <div className="animate-fade-in">
-                <div className="mb-6">
-                    <h2 className="text-2xl font-bold text-slate-800">派遣公差模式</h2>
-                    <p className="text-slate-500">檢視人力狀況並分派任務</p>
-                </div>
-                <DispatchView user={user} />
-            </div>
-        );
-    }
 
     if (viewMode && isDutyOfficerCapable(user.role) && viewMode !== Role.SOLDIER) {
         // Default Duty Officer View (Stats)
@@ -170,7 +157,7 @@ const App: React.FC = () => {
                    <button
                         onClick={() => setViewMode(user.role)}
                         className={`flex-shrink-0 flex items-center space-x-2 px-3 py-1 rounded transition ${
-                            (viewMode !== Role.SOLDIER && viewMode !== 'DISPATCH_MODE') 
+                            (viewMode !== Role.SOLDIER) 
                             ? 'text-blue-300 bg-slate-900 shadow-inner' 
                             : 'text-slate-400 hover:text-slate-200'
                         }`}
@@ -179,20 +166,7 @@ const App: React.FC = () => {
                        <span>部隊掌握</span>
                    </button>
 
-                   {/* 2. Dispatch Mode (New) */}
-                   <button
-                        onClick={() => setViewMode('DISPATCH_MODE')}
-                        className={`flex-shrink-0 flex items-center space-x-2 px-3 py-1 rounded transition ${
-                            viewMode === 'DISPATCH_MODE'
-                            ? 'text-amber-300 bg-slate-900 shadow-inner' 
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                   >
-                       <Briefcase className="w-4 h-4" />
-                       <span>派遣公差</span>
-                   </button>
-
-                   {/* 3. Personal Report Mode */}
+                   {/* 2. Personal Report Mode */}
                    <button
                         onClick={() => setViewMode(Role.SOLDIER)} 
                         className={`flex-shrink-0 flex items-center space-x-2 px-3 py-1 rounded transition ${

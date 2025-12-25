@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { UserProfile, IncidentReport, TIME_SLOTS, getDateOffsetString } from '../types';
+import { UserProfile, IncidentReport, TIME_SLOTS, getDateOffsetString, normalizeDate } from '../types';
 import { getReports, getRoster } from '../services/storageService';
 import StatusGrid from './StatusGrid';
 import { RefreshCw, Filter, AlertCircle, FileText, Users, UserCheck, AlertTriangle, Clock, PlayCircle, PauseCircle } from 'lucide-react';
@@ -96,10 +96,10 @@ const DutyOfficerView: React.FC<DutyOfficerViewProps> = ({ user }) => {
   // Derived Data Calculation
   const targetDate = getDateOffsetString(dateOffset);
 
-  // Filter: Match TimeSlot AND Date
+  // Filter: Match TimeSlot AND Date (Robust comparison using normalizeDate)
   const currentSlotReports = reports.filter(r => 
     r.timeSlot === selectedTimeSlot && 
-    r.date === targetDate
+    normalizeDate(r.date) === targetDate
   );
   
   // Statistics Logic
@@ -312,7 +312,7 @@ const DutyOfficerView: React.FC<DutyOfficerViewProps> = ({ user }) => {
                                         {report.userName}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                        {report.date}
+                                        {normalizeDate(report.date)}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">

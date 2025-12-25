@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, IncidentReport, TIME_SLOTS, getTodayString } from '../types';
+import { UserProfile, IncidentReport, TIME_SLOTS, getTodayString, normalizeDate } from '../types';
 import { saveReport, getMyReports, deleteReport } from '../services/storageService';
 import { Send, Trash2, History, Calendar, Loader2, AlertTriangle } from 'lucide-react';
 
@@ -60,7 +60,7 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
       timeSlot,
       content,
       timestamp: Date.now(),
-      status: '進行中' // Default status for manual reports
+      status: 'pending' // Default status for manual reports
     };
 
     try {
@@ -196,7 +196,7 @@ const ReporterView: React.FC<ReporterViewProps> = ({ user }) => {
                     <div key={record.id} className="p-4 flex justify-between items-center hover:bg-slate-50 transition">
                         <div>
                             <div className="flex items-center text-xs text-slate-500 mb-1">
-                                <span className="mr-2">{record.date}</span>
+                                <span className="mr-2">{normalizeDate(record.date)}</span>
                                 <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
                                     {record.timeSlot}
                                 </span>

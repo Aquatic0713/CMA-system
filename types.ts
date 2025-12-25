@@ -43,19 +43,7 @@ export interface IncidentReport {
   timeSlot: string;
   content: string; 
   timestamp: number;
-  status: '進行中' | '已完成'; // Updated to Chinese for Google Sheets Dropdown compatibility
-}
-
-export interface DispatchTask {
-  id: string;
-  unit: Unit;
-  date: string;
-  timeSlot: string;
-  taskName: string;
-  assignees: string[]; // Array of positionKeys
-  assigneeNames: string[]; // Snapshot of names for easy display
-  timestamp: number;
-  status: '進行中' | '已完成'; // Updated to Chinese
+  status: 'pending' | 'completed'; // Reverted to English for backend compatibility
 }
 
 // Updated to full hourly slots based on user request for precision (e.g., 08:00-09:00)
@@ -142,6 +130,27 @@ export const getTodayString = () => {
 export const getDateOffsetString = (offsetDays: number) => {
     const d = new Date();
     d.setDate(d.getDate() + offsetDays);
+    const offset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - offset).toISOString().split('T')[0];
+};
+
+/**
+ * Normalizes a date string to YYYY-MM-DD format.
+ * Handles cases where Google Sheets returns an ISO string (e.g., 2025-12-22T16:00:00.000Z)
+ * which might differ from the local YYYY-MM-DD due to timezone.
+ */
+export const normalizeDate = (dateInput: string): string => {
+    if (!dateInput) return "";
+    
+    // If it's already exactly YYYY-MM-DD, return it.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) return dateInput;
+
+    // Otherwise try to parse it
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return dateInput; // Fallback if invalid
+
+    // Convert to Local Time YYYY-MM-DD
+    // Note: We use the same offset trick as getTodayString to ensure consistency
     const offset = d.getTimezoneOffset() * 60000;
     return new Date(d.getTime() - offset).toISOString().split('T')[0];
 };

@@ -1,4 +1,4 @@
-import { UserProfile, IncidentReport, Unit, DispatchTask } from '../types';
+import { UserProfile, IncidentReport, Unit } from '../types';
 
 // --- GOOGLE SHEETS API CONFIGURATION ---
 // ⚠️ 請在此處填入您的 Google Apps Script 部署網址 (Web App URL)
@@ -21,7 +21,6 @@ export const isCloudMode = () => isCloudEnabled;
 const USER_KEY = 'milstat_user_v3'; 
 const ROSTER_KEY_LOCAL = 'milstat_roster_v3';
 const REPORTS_KEY_LOCAL = 'milstat_reports_v3';
-const TASKS_KEY_LOCAL = 'milstat_tasks_v3';
 
 // --- Helper for API Calls ---
 async function callApi(action: string, payload: any = {}) {
@@ -114,8 +113,8 @@ export const getRoster = async (unit: Unit): Promise<UserProfile[]> => {
 // --- Reports Management ---
 
 export const saveReport = async (report: IncidentReport): Promise<void> => {
-  // Ensure status has a default of '進行中'
-  const finalReport = { ...report, status: report.status || '進行中' };
+  // Ensure status has a default of 'pending'
+  const finalReport = { ...report, status: report.status || 'pending' };
 
   if (isCloudEnabled) {
       const safeTime = finalReport.timeSlot.replace(/:/g, '');
@@ -167,140 +166,3 @@ export const deleteReport = async (reportId: string): Promise<void> => {
         localStorage.setItem(REPORTS_KEY_LOCAL, JSON.stringify(newReports));
     }
 }
-
-// --- Dispatch Tasks Management (Dual Storage) ---
-
-// Helper: Operate on LocalStorage for Tasks
-const updateLocalTask = (task: DispatchTask) => {
-    const existingCheck = localStorage.getItem(TASKS_KEY_LOCAL);
-    const tasks: DispatchTask[] = existingCheck ? JSON.parse(existingCheck) : [];
-    const index = tasks.findIndex(t => t.id === task.id);
-    if (index >= 0) {
-        tasks[index] = task;
-    } else {
-        tasks.push(task);
-    }
-    localStorage.setItem(TASKS_KEY_LOCAL, JSON.stringify(tasks));
-};
-
-const deleteLocalTask = (taskId: string) => {
-    const data = localStorage.getItem(TASKS_KEY_LOCAL);
-    if (!data) return;
-    const tasks: DispatchTask[] = JSON.parse(data);
-    const newTasks = tasks.filter(t => t.id !== taskId);
-    localStorage.setItem(TASKS_KEY_LOCAL, JSON.stringify(newTasks));
-};
-
-const getLocalTasks = (unit: Unit): DispatchTask[] => {
-    const data = localStorage.getItem(TASKS_KEY_LOCAL);
-    if (!data) return [];
-    const tasks: DispatchTask[] = JSON.parse(data);
-    return tasks.filter(t => t.unit === unit);
-};
-
-export const saveTask = async (task: DispatchTask): Promise<void> => {
-    // 1. Always save to LocalStorage (Shadow Copy) for immediate persistence
-    updateLocalTask(task);
-
-    // 2. Try saving to Cloud if enabled
-    if (isCloudEnabled) {
-        try {
-            await callApi('save_task', { task });
-        } catch (e) {
-            console.warn("Cloud save_task failed, using local copy.", e);
-            // We do NOT throw here. We rely on local copy to keep UI working.
-        }
-    }
-};
-
-export const getTasks = async (unit: Unit): Promise<DispatchTask[]> => {
-    let cloudTasks: DispatchTask[] | null = null;
-    
-    // 1. Try fetching from Cloud
-    if (isCloudEnabled) {
-        try {
-            const rawData = await callApi('get_tasks', { unit });
-            // FIREWALL: Client-side filtering
-            if (Array.isArray(rawData)) {
-                cloudTasks = rawData.filter((t: any) => t.unit === unit);
-            }
-        } catch (e) {
-            console.warn("Cloud get_tasks failed/unsupported, falling back to local.", e);
-        }
-    }
-
-    // 2. Get Local Data
-    const localTasks = getLocalTasks(unit);
-
-    // 3. Strategy: 
-    if (cloudTasks && cloudTasks.length > 0) {
-        return cloudTasks;
-    }
-
-    // Fallback
-    return localTasks;
-};
-
-export const deleteTask = async (taskId: string): Promise<void> => {
-    // 1. Always delete from LocalStorage
-    deleteLocalTask(taskId);
-
-    // 2. Try delete from Cloud
-    if (isCloudEnabled) {
-        try {
-            await callApi('delete_task', { id: taskId });
-        } catch (e) {
-            console.warn("Cloud delete_task failed", e);
-        }
-    }
-};
-
-// --- Sync Functions: Task <-> Reports ---
-
-export const addDutyReports = async (task: DispatchTask, providedRoster?: UserProfile[]): Promise<void> => {
-    const roster = providedRoster || await getRoster(task.unit);
-    if (!roster || roster.length === 0) return;
-
-    const promises = task.assignees.map(async (assigneeKey) => {
-        const userProfile = roster.find(u => u.positionKey === assigneeKey);
-        if (!userProfile) return; 
-
-        const safeTime = task.timeSlot.replace(/:/g, '');
-        const docId = `${task.unit}_${userProfile.positionKey}_${task.date}_${safeTime}`;
-
-        const report: IncidentReport = {
-            id: docId,
-            positionKey: userProfile.positionKey,
-            userName: userProfile.name,
-            studentId: userProfile.studentId,
-            positionName: userProfile.positionName,
-            unit: task.unit,
-            date: task.date,
-            timeSlot: task.timeSlot,
-            content: "公差",
-            timestamp: Date.now(),
-            status: task.status // Sync status from Task to Reports
-        };
-        
-        return saveReport(report);
-    });
-    
-    await Promise.all(promises);
-};
-
-export const removeDutyReports = async (task: DispatchTask): Promise<void> => {
-    // 1. Get all reports first
-    const allReports = await getReports(task.unit);
-    
-    // 2. Filter strictly
-    const reportsToDelete = allReports.filter(r => 
-        r.date === task.date &&
-        r.timeSlot === task.timeSlot &&
-        r.content === "公差" &&
-        task.assignees.includes(r.positionKey)
-    );
-
-    // 3. Delete them one by one
-    const deletePromises = reportsToDelete.map(r => deleteReport(r.id));
-    await Promise.all(deletePromises);
-};
