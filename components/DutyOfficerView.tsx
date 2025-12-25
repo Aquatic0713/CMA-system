@@ -279,7 +279,7 @@ const DutyOfficerView: React.FC<DutyOfficerViewProps> = ({ user }) => {
                     }
                 </span>
             </div>
-            <StatusGrid reports={currentSlotReports} roster={roster} />
+            <StatusGrid reports={currentSlotReports} roster={roster} unit={user.unit} />
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">

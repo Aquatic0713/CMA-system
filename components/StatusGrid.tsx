@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
-import { IncidentReport, generateGridStructure, GridSlot, UserProfile } from '../types';
+import { IncidentReport, generateGridStructure, GridSlot, UserProfile, Unit } from '../types';
 import { User } from 'lucide-react';
 
 interface StatusGridProps {
   reports: IncidentReport[];
   roster?: UserProfile[]; 
+  unit: Unit; // New prop required to generate correct keys
 }
 
-const StatusGrid: React.FC<StatusGridProps> = ({ reports, roster = [] }) => {
+const StatusGrid: React.FC<StatusGridProps> = ({ reports, roster = [], unit }) => {
   // Map of positionKey -> Report
   const reportMap = useMemo(() => {
     const map: Record<string, IncidentReport> = {};
@@ -26,7 +27,8 @@ const StatusGrid: React.FC<StatusGridProps> = ({ reports, roster = [] }) => {
     return map;
   }, [roster]);
 
-  const gridStructure = useMemo(() => generateGridStructure(), []);
+  // Generate grid structure specific to this unit (keys will have suffix like _1, _14)
+  const gridStructure = useMemo(() => generateGridStructure(unit), [unit]);
 
   // Group slots by their rowGroup for visual separation
   const groupedSlots = useMemo(() => {

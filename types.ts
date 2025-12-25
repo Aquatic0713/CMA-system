@@ -29,7 +29,7 @@ export interface UserProfile {
   unit: Unit;
   role: Role;
   positionName: string; // The display name of the specific job (e.g., "實習連長", "第一班班長")
-  positionKey: string; // The unique ID for grid sorting (e.g., "HQ_1", "SQ_01_L")
+  positionKey: string; // The unique ID for grid sorting (e.g., "HQ_1_1", "SQ_01_L_14")
 }
 
 export interface IncidentReport {
@@ -74,29 +74,40 @@ export interface GridSlot {
   rowGroup: string;
 }
 
-// Generate the specific grid structure requested
-export const generateGridStructure = (): GridSlot[] => {
+// Helper: Convert Unit Enum to ID string (e.g., "學一連" -> "1", "學十四連" -> "14")
+export const getUnitId = (unit: Unit): string => {
+  const map: Record<string, string> = {
+    [Unit.C1]: "1", [Unit.C2]: "2", [Unit.C3]: "3", [Unit.C4]: "4", [Unit.C5]: "5",
+    [Unit.C6]: "6", [Unit.C7]: "7", [Unit.C8]: "8", [Unit.C9]: "9", [Unit.C10]: "10",
+    [Unit.C11]: "11", [Unit.C12]: "12", [Unit.C13]: "13", [Unit.C14]: "14"
+  };
+  return map[unit] || "0";
+};
+
+// Generate the specific grid structure requested, now appending Unit ID to keys
+export const generateGridStructure = (unit: Unit): GridSlot[] => {
   const slots: GridSlot[] = [];
+  const suffix = getUnitId(unit); // e.g., "1" or "14"
 
   // Row 1: HQ
   slots.push(
-    { key: "HQ_1", label: "實習連長", rowGroup: "連部" },
-    { key: "HQ_2", label: "實習副連長", rowGroup: "連部" },
-    { key: "HQ_3", label: "實習連輔導長", rowGroup: "連部" },
-    { key: "HQ_4", label: "實習連士官督導長", rowGroup: "連部" }
+    { key: `HQ_1_${suffix}`, label: "實習連長", rowGroup: "連部" },
+    { key: `HQ_2_${suffix}`, label: "實習副連長", rowGroup: "連部" },
+    { key: `HQ_3_${suffix}`, label: "實習連輔導長", rowGroup: "連部" },
+    { key: `HQ_4_${suffix}`, label: "實習連士官督導長", rowGroup: "連部" }
   );
 
   // Row 2: Platoon
   slots.push(
-    { key: "PL_1", label: "一排排長", rowGroup: "排部" },
-    { key: "PL_2", label: "二排排長", rowGroup: "排部" },
-    { key: "PL_3", label: "三排排長", rowGroup: "排部" }
+    { key: `PL_1_${suffix}`, label: "一排排長", rowGroup: "排部" },
+    { key: `PL_2_${suffix}`, label: "二排排長", rowGroup: "排部" },
+    { key: `PL_3_${suffix}`, label: "三排排長", rowGroup: "排部" }
   );
 
   // Row 3: Staff
   const staffOrder = ["人事士", "訓練士", "後勤士", "政戰士", "軍械士", "資安士"];
   staffOrder.forEach((s, i) => {
-    slots.push({ key: `ST_${i+1}`, label: s, rowGroup: "幕僚" });
+    slots.push({ key: `ST_${i+1}_${suffix}`, label: s, rowGroup: "幕僚" });
   });
 
   // Row 4-15: Squads (1-12)
@@ -105,12 +116,12 @@ export const generateGridStructure = (): GridSlot[] => {
     const rowName = `第${s}班`;
     
     // Squad Leader
-    slots.push({ key: `${squadPrefix}_L`, label: `${rowName}班長`, rowGroup: rowName });
+    slots.push({ key: `${squadPrefix}_L_${suffix}`, label: `${rowName}班長`, rowGroup: rowName });
     
     // Members 1-10
     for (let m = 1; m <= 10; m++) {
       slots.push({ 
-        key: `${squadPrefix}_${m.toString().padStart(2, '0')}`, 
+        key: `${squadPrefix}_${m.toString().padStart(2, '0')}_${suffix}`, 
         label: `${rowName}第${m}員`, 
         rowGroup: rowName 
       });

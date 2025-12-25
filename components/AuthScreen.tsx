@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Unit, Role, UserProfile } from '../types';
+import { Unit, Role, UserProfile, getUnitId } from '../types';
 import { saveUserProfile, updateRoster, getRoster, isCloudMode } from '../services/storageService';
 import { ShieldCheck, UserPlus, Loader2, Wifi, WifiOff, AlertTriangle, Info, Table2 } from 'lucide-react';
 
@@ -90,33 +90,38 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
     }
 
     let positionName = "";
-    let positionKey = "";
-
+    let baseKey = "";
+    
+    // Generate Base Key
     switch (role) {
       case Role.CADET_HQ:
         positionName = hqRole;
         const hqIdx = hqOptions.indexOf(hqRole) + 1;
-        positionKey = `HQ_${hqIdx}`;
+        baseKey = `HQ_${hqIdx}`;
         break;
       case Role.CADET_PLATOON:
         positionName = platoonRole;
         const plIdx = platoonOptions.indexOf(platoonRole) + 1;
-        positionKey = `PL_${plIdx}`;
+        baseKey = `PL_${plIdx}`;
         break;
       case Role.STAFF:
         positionName = staffRole;
         const stIdx = staffOptions.indexOf(staffRole) + 1;
-        positionKey = `ST_${stIdx}`;
+        baseKey = `ST_${stIdx}`;
         break;
       case Role.SQUAD_LEADER:
         positionName = `第${squadNum}班班長`;
-        positionKey = `SQ_${squadNum.padStart(2, '0')}_L`;
+        baseKey = `SQ_${squadNum.padStart(2, '0')}_L`;
         break;
       case Role.SOLDIER:
         positionName = `第${squadNum}班第${soldierNum}員`;
-        positionKey = `SQ_${squadNum.padStart(2, '0')}_${soldierNum.padStart(2, '0')}`;
+        baseKey = `SQ_${squadNum.padStart(2, '0')}_${soldierNum.padStart(2, '0')}`;
         break;
     }
+
+    // Append Unit ID to make it globally unique (e.g., PL_1_1, PL_1_14)
+    const unitId = getUnitId(unit);
+    const positionKey = `${baseKey}_${unitId}`;
 
     try {
         // Async Check for duplicates in Cloud
